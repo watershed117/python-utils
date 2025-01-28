@@ -1,8 +1,5 @@
 # python-utils
 这是一个用于存放常用Python功能模块的仓库
-
-以下是一个适合你项目的 `README.md` 文件模板，用于描述你的 `EventLoop` 实现及其功能。你可以根据需要进行调整和补充。
-
 ---
 
 # event_loop.py - Python 事件循环实现
