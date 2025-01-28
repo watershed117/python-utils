@@ -188,7 +188,7 @@ if __name__ == "__main__":
 
     # 等待所有事件完成
 
-    for desc, eid in event_ids:
+    for desc, eid in event_ids[:]:
         result = test.get_event_result(eid)
         if isinstance(result, Exception):
             print(f"事件 [{desc}] 处理失败: {result}")
