@@ -16,87 +16,88 @@
 以下是一个简单的使用示例：
 
 ```python
-import time
-from event_loop import EventLoop
+if __name__ == "__main__":
+    import time
+    class Test(EventLoop):
+        @EventLoop.validate_arguments
+        def test_method(self, arg1: int, arg2: int):
+            """测试方法"""
+            return arg1 + arg2
 
-class Test(EventLoop):
-    @EventLoop.validate_arguments
-    def test_method(self, arg1: int, arg2: int):
-        """测试方法"""
-        return arg1 + arg2
+        @EventLoop.validate_arguments
+        def test_method2(self):
+            """无参数测试方法"""
+            return "success"
+        
+        @EventLoop.validate_arguments
+        def long_time_task(self):
+            """耗时任务"""
+            time.sleep(5)
+            return None
 
-    @EventLoop.validate_arguments
-    def test_method2(self):
-        """无参数测试方法"""
-        return "success"
-    
-    @EventLoop.validate_arguments
-    def long_time_task(self):
-        """耗时任务"""
-        time.sleep(5)
-        return None
+    test = Test()
+    t = threading.Thread(target=test.run, daemon=True)
+    t.start()
 
-test = Test()
-t = threading.Thread(target=test.run, daemon=True)
-t.start()
+    # 定义测试用例
+    test_cases = [
+        ("正常调用", ("test_method", (1, 2), {})),
+        ("关键字参数调用", ("test_method", (), {"arg1": 3, "arg2": 4})),
+        ("无参方法", ("test_method2",)),
+        ("不存在的方法", ("invalid_method",)),
+        ("参数不足", ("test_method", (1,))),
+        ("错误参数类型", ("test_method", ("a", "b"))),
+        ("耗时任务", ("long_time_task",)),  # 添加耗时任务
+        ("停止事件", "stop")
+    ]
 
-# 定义测试用例
-test_cases = [
-    ("正常调用", ("test_method", (1, 2), {})),
-    ("关键字参数调用", ("test_method", (), {"arg1": 3, "arg2": 4})),
-    ("无参方法", ("test_method2",)),
-    ("不存在的方法", ("invalid_method",)),
-    ("参数不足", ("test_method", (1,))),
-    ("错误参数类型", ("test_method", ("a", "b"))),
-    ("耗时任务", ("long_time_task",)),  # 添加耗时任务
-    ("停止事件", "stop")
-]
+    # 提交测试用例
+    event_ids = []
+    for desc, event in test_cases[:-1]:  # 最后一个事件（停止事件）单独处理
+        eid = test.add_event(event)
+        event_ids.append((desc, eid))
+        print(f"已提交事件 [{desc}] ID: {eid}")
 
-# 提交测试用例
-event_ids = []
-for desc, event in test_cases[:-1]:  # 最后一个事件（停止事件）单独处理
-    eid = test.add_event(event)
-    event_ids.append((desc, eid))
-    print(f"已提交事件 [{desc}] ID: {eid}")
+    # 等待所有事件完成
 
-# 等待所有事件完成
+    for desc, eid in event_ids[:]:
+        result = test.get_event_result(eid)
+        if result[0] == "error":
+            print(f"事件 [{desc}] 处理失败: {result[1]}")
+        else:
+            print(f"事件 [{desc}] 已处理，结果: {result[1]}")
+        event_ids.remove((desc, eid))
 
-for desc, eid in event_ids:
-    result = test.get_event_result(eid)
-    if isinstance(result, Exception):
-        print(f"事件 [{desc}] 处理失败: {result}")
+    # while event_ids:
+    #     for desc, eid in event_ids[:]:  # 使用 event_ids[:] 创建副本以避免修改迭代中的列表
+    #         if eid in test.event_results:
+    #             status = test.event_results[eid]["status"]
+    #             if status == "completed":
+    #                 result = test.get_event_result(eid)[1]
+    #                 print(f"事件 [{desc}] 已处理，结果: {result}")
+    #                 event_ids.remove((desc, eid))
+    #             elif status == "error":
+    #                 error = test.get_event_result(eid)[1]
+    #                 print(f"事件 [{desc}] 处理失败: {error}")
+    #                 event_ids.remove((desc, eid))
+    #             else:
+    #                 pass
+    #                 # print(f"事件 [{desc}] 仍在进行中")
+    #         else:
+    #             print(f"事件 [{desc}] 不存在或已被移除")
+    #             event_ids.remove((desc, eid))  # 从列表中移除无效的任务
+    #     time.sleep(1)  # 每隔 1 秒检查一次
+
+    print("所有事件处理完成")
+    if not test.event_results:
+        print("event_results已处理完成")
     else:
-        print(f"事件 [{desc}] 已处理，结果: {result}")
-    event_ids.remove((desc, eid))
+        print("event_results存在未处理的结果")
+        print(test.event_results)
 
-# while event_ids:
-#     for desc, eid in event_ids[:]:  # 使用 event_ids[:] 创建副本以避免修改迭代中的列表
-#         if eid in test.event_results:
-#             status = test.event_results[eid]["status"]
-#             if status == "completed":
-#                 result = test.get_event_result(eid)
-#                 if isinstance(result, Exception):
-#                     print(f"事件 [{desc}] 处理失败: {result}")
-#                 else:
-#                     print(f"事件 [{desc}] 已处理，结果: {result}")
-#                 event_ids.remove((desc, eid))  # 从列表中移除已完成的任务
-#             else:
-#                 pass
-#                 # print(f"事件 [{desc}] 仍在进行中")
-#         else:
-#             print(f"事件 [{desc}] 不存在或已被移除")
-#             event_ids.remove((desc, eid))  # 从列表中移除无效的任务
-#     time.sleep(1)  # 每隔 1 秒检查一次
-
-print("所有事件处理完成")
-if not test.event_results:
-    print("event_results已处理完成")
-else:
-    print("event_results存在未处理的结果")
-
-# 发送停止事件
-test.add_event("stop")
-t.join(timeout=1)
+    # 发送停止事件
+    test.add_event("stop")
+    t.join(timeout=1)
 ```
 
 ### 输出示例
