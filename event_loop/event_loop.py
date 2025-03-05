@@ -1,7 +1,7 @@
 import queue
 import threading
 import uuid
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict
 from pydantic import validate_call, ValidationError
 import logging
 from colorama import Fore, Style, init
@@ -139,7 +139,7 @@ class EventLoop:
             self.event_queue.put((event_id, (func, args, kwargs)))  # 传递 args 和 kwargs
         return event_id
 
-    def get_event_result(self, event_id: uuid.UUID) -> Optional[Dict[str, Any]]:
+    def get_event_result(self, event_id: uuid.UUID) ->Dict[str, Any]:
         """获取结果，如果结果未就绪则等待"""
         with self.condition:
             if event_id not in self.event_results:
@@ -235,25 +235,25 @@ if __name__ == "__main__":
             pass
         event_ids.remove(eid)  # 移除已处理的事件ID
 
-    # # 轮询等待事件处理完成
-    # while event_ids:
-    #     for eid in event_ids[:]:  # 使用 event_ids[:] 创建副本以避免修改迭代中的列表
-    #         if eid in event_loop.event_results:
-    #             status = event_loop.event_results[eid]["status"]
-    #             if status == "completed":
-    #                 result = event_loop.get_event_result(eid).get("result")
-    #                 logger.info(f"\n事件 {eid} 已处理，结果: {result}")
-    #                 event_ids.remove(eid)
-    #             elif status == "error":
-    #                 error = event_loop.get_event_result(eid).get("result")
-    #                 logger.error(f"\n事件 {eid} 处理失败: {error}")
-    #                 event_ids.remove(eid)
-    #             else:
-    #                 pass
-    #         else:
-    #             logger.error(f"\n事件 {eid} 不存在或已被移除")
-    #             event_ids.remove(eid)  # 从列表中移除无效的任务
-    #     time.sleep(1)  # 每隔 1 秒检查一次
+    # 轮询等待事件处理完成
+    while event_ids:
+        for eid in event_ids[:]:  # 使用 event_ids[:] 创建副本以避免修改迭代中的列表
+            if eid in event_loop.event_results:
+                status = event_loop.event_results[eid]["status"]
+                if status == "completed":
+                    result = event_loop.get_event_result(eid).get("result")
+                    logger.info(f"\n事件 {eid} 已处理，结果: {result}")
+                    event_ids.remove(eid)
+                elif status == "error":
+                    error = event_loop.get_event_result(eid).get("result")
+                    logger.error(f"\n事件 {eid} 处理失败: {error}")
+                    event_ids.remove(eid)
+                else:
+                    pass
+            else:
+                logger.error(f"\n事件 {eid} 不存在或已被移除")
+                event_ids.remove(eid)  # 从列表中移除无效的任务
+        time.sleep(1)  # 每隔 1 秒检查一次
 
     logger.info("\n所有事件处理完成")
     if not event_loop.event_results:
