@@ -160,7 +160,14 @@ class Base_llm:
         :param folder_path: 文件夹路径，如果未提供则使用存储路径
         :return: 排序后的文件路径列表
         """
-        target_dir = pathlib.Path(folder_path) if folder_path else self.storage
+        if folder_path:
+            target_dir = pathlib.Path(folder_path)
+        elif self.storage:
+            target_dir = self.storage
+        else:
+            raise ValueError("storage path is not valid")
+        if not target_dir.exists() or not target_dir.is_dir():
+            raise ValueError(f"The path {target_dir} does not exist or is not a directory.")
         files = sorted(target_dir.glob("*.json"), 
                       key=lambda x: x.stat().st_ctime, 
                       reverse=True)
@@ -172,7 +179,9 @@ class Base_llm:
 
         :return: 对话记录列表，包含标题和ID
         """
-        files = self.sort_files(self.storage)
+        if not self.storage:
+            raise ValueError("storage path is not valid")
+        files = self.sort_files(self.storage.as_posix())
         conversations = []
         for file_path in files:
             with open(file_path, 'r', encoding='utf-8') as file:
@@ -272,13 +281,13 @@ class Base_llm:
             # 情况1：指定了特定工具函数名
             if function_name:
                 for tool in tool_calls:
-                    func = tool.get("function")
+                    func = tool.get("function") # type: ignore
                     if func and func.get("name") == function_name:
                         return [func]  # 返回第一个匹配项
             
             # 情况2：未指定函数名，返回所有工具函数
             else:
-                functions = [tool.get("function") for tool in tool_calls if tool.get("function")]
+                functions = [tool.get("function") for tool in tool_calls if tool.get("function")] # type: ignore
                 if functions:
                     return functions  # 返回当前消息的所有函数
         
@@ -317,8 +326,9 @@ class Async_Base_llm(Base_llm):
         super().__init__(api_key, base_url, model, storage, tools, system_prompt, limit, proxy)
         self.client = httpx.AsyncClient(
             headers={"Authorization": f"Bearer {api_key}"},
-            proxy=proxy
+            proxy=proxy.get('https') or proxy.get('http')
         )
+
 
     async def send(self, messages: Union[dict, list[dict]]):
         """
@@ -338,7 +348,8 @@ class Async_Base_llm(Base_llm):
         if self.tools:
             payload.update({"tools": self.tools})
         try:
-            response = await self.client.post(url, json=payload)
+            async with self.client as client:
+                response = await client.post(url, json=payload)
         except Exception as e:
             raise e
 
@@ -406,7 +417,9 @@ class Async_Base_llm(Base_llm):
 
         :return: 对话记录列表，包含标题和ID
         """
-        files = self.sort_files(self.storage)
+        if not self.storage:
+            raise ValueError("storage path is not valid")
+        files = self.sort_files(self.storage.as_posix())
         conversations = []
         for file_path in files:
             async with aiofiles.open(file_path, 'r', encoding='utf-8') as file:
@@ -437,7 +450,8 @@ class Async_Base_llm(Base_llm):
         """
         payload = {"model": model, "messages": data}
         try:
-            response = await self.client.post(url, json=payload)
+            async with self.client as client:
+                response = await client.post(url, json=payload)
         except Exception as e:
             raise e
         if response.status_code == 200:
@@ -559,7 +573,8 @@ class MessageGenerator:
         if not target_path:
             target_path = file_path.rsplit('.', 1)[0] + target_format
         else:
-            if not pathlib.Path.exists(target_path):
+            tmp = pathlib.Path(target_path)
+            if not tmp.exists() or not tmp.is_dir():
                 raise ValueError("target_path is not a valid file path")
         try:
             process = subprocess.Popen(
@@ -629,48 +644,24 @@ class MessageGenerator:
                         f"file {file_path} format {format} is not supported")
             return payload
 
+class Gemini(Base_llm):
+    def list_models(self):
+        """
+        获取模型列表。
 
-if __name__ == "__main__":
-    # chat = Base_llm(base_url="https://api.deepseek.com",
-    #                 model="deepseek-chat",
-    #                 api_key="",
-    #                 storage=r"C:\Users\water\Desktop\renpy\Ushio_Noa\game\history",
-    #                 proxy=None)  # type: ignore
-
-    chat = Base_llm(base_url="https://gemini.watershed.ip-ddns.com/v1",
-                    model="gemini-1.5-flash",
-                    api_key="",
-                    storage=r"C:\Users\water\Desktop\renpy\Ushio_Noa\game\history",
-                    system_prompt="使用中文回复",
-                    proxy=None)  # type: ignore
-
-    message_generator = MessageGenerator(
-        format="openai", file_format=GEMINI, ffmpeg_path="ffmpeg")
-
-    message = message_generator.gen_user_msg("分析图片内容", [r"C:\Users\1.png"])
-    result = chat.send(messages=message)  # type: ignore
-    print(result)
-
-    import asyncio
-    async def main():
-        chat = Async_Base_llm( base_url="https://open.bigmodel.cn/api/paas/v4",
-                    model="glm-4-flash", 
-                    api_key="", 
-                    storage=r"C:\Users\water\Desktop\renpy\Ushio_Noa\game\history",
-                    limit="8k",
-                    proxy=None)
-        conversation_id=await chat.load("ba930190-7581-4a4c-a49a-bfd286adc6fb")
-        print(conversation_id)
-        result=chat.latest_tool_recall(chat.chat_history,"bg_changer")
-        print(result)
-        result=chat.get_latest_message(chat.chat_history)
-        print(result)
-        result=await chat.get_conversations()
-        print(result)
-        result=await chat.send({"role": "user", "content": "你好"})
-        print(result)
-        result=await chat.save(conversation_id)
-        print(result)
-        chat.delete_conversation(conversation_id)
-
-    asyncio.run(main())
+        :return: 模型列表
+        """
+        url = f"{self.base_url}/models"
+        try:
+            response = self.client.get(url,proxies=self.proxy)
+        except Exception as e:
+            raise e
+        if response.status_code == 200:
+            result = response.json()
+            return result
+        else:
+            try:
+                error_info = response.json()
+            except Exception:
+                error_info = response.text
+            raise Exception(f"{response.status_code} : {error_info}")
